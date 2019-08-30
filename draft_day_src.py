@@ -204,7 +204,7 @@ def draft(curr_yr, player_pool, owners, keepers, draft_order, num_rounds=16):
     # Perform draft
     results = '{}/draft_results.xlsx'.format(curr_yr)
     indv_results = '{}/indv_draft_results.xlsx'.format(curr_yr)
-    indv_depth_charts = '{}/indv_draft_charts.xlsx'.format(curr_yr)
+    indv_depth_charts = '{}/indv_depth_charts.xlsx'.format(curr_yr)
 
     input_str = """You can either enter who you would like to draft or perform
     any of the following options by entering it's corresponding number:
