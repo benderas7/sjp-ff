@@ -3,7 +3,7 @@ import random
 import os
 import datetime
 import pickle
-from IPython.display import display, Markdown
+from IPython.display import display
 
 
 # Helper function for bolding text string
