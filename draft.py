@@ -18,17 +18,85 @@ def ordinal(num):
     return str(num) + lst[num - 1]
 
 
-# Pre-Draft Proceedings
+class Draft:
 
-# Helper function - keepers
-def determine_keepers(curr_yr, owners, last_yr_df, player_pool):
-    keepers_pkl = '{}/keepers.pkl'.format(curr_yr)
-    if os.path.exists(keepers_pkl):
-        with open(keepers_pkl, 'rb') as f:
-            keepers = pickle.load(f)
-    else:
-        keepers = {}
-        for owner in owners:
+    def __init__(self, draft_format):
+        # Draft basics
+        assert draft_format in ('Salary Cap', 'Snake')
+        self.format = draft_format
+        self.curr_yr = str(datetime.datetime.now().year)
+        self.last_yr = str(int(self.curr_yr) - 1)
+        self.owners = pd.ExcelFile(self.last_yr_indv).sheet_names
+        self.num_rounds = 16
+        self.input_str = """
+        You can either enter who you would like to draft or perform any of the 
+        following options by entering it's corresponding number:
+
+        1) Look at who you already have drafted
+        2) View your current depth chart
+        3) See Mike Clay's best players available
+        4) See the last 10 players drafted
+        5) Look at the full draft history
+
+        """
+
+        # Data structures
+        self.last_yr_df = pd.read_excel(self.last_yr_res, index_col=2)
+        self.player_pool = pd.read_excel(self.raw_data, index_col=[0])
+        self.player_pool['Position'] = self.player_pool['Position'].str.strip()
+        if os.path.exists(self.keepers_pkl):
+            with open(self.keepers_pkl, 'rb') as f:
+                self.keepers = pickle.load(f)
+        else:
+            self.keepers = None
+        if os.path.exists(self.draft_order_pkl):
+            with open(self.draft_order_pkl, 'rb') as f:
+                self.draft_order = pickle.load(f)
+        else:
+            self.draft_order = None
+        column_names = [
+            'Round', 'Player', 'Position', 'Bye', 'ESPN Projection', 'Owner']
+        self.draft_history = pd.DataFrame(index=[], columns=column_names)
+        self.draft_history.index.name = 'Pick Overall'
+        self.draft_history_indv = {}
+        self.depth_charts = {}
+        for owner in self.owners:
+            column_names = [
+                'Round', 'Player', 'Position', 'Bye', 'ESPN Projection']
+            self.draft_history_indv[owner] = pd.DataFrame(
+                index=[], columns=column_names)
+            self.draft_history_indv[owner].index.name = 'Pick Overall'
+            self.depth_charts[owner] = pd.read_excel(
+                'depth_chart_blank.xlsx', index_col=[0])
+
+        # File paths
+        self.keepers_pkl = '{}/keepers.pkl'.format(self.curr_yr)
+        self.draft_order_pkl = '{}/draft_order.pkl'.format(self.curr_yr)
+        self.last_yr_res = '{}/draft_results.xlsx'.format(self.last_yr)
+        self.raw_data = '{}/raw_data.xlsx'.format(self.curr_yr)
+        self.last_yr_indv = '{}/indv_draft_results.xlsx'.format(self.last_yr)
+        self.results = '{}/draft_results.xlsx'.format(self.curr_yr)
+        self.indv_results = '{}/indv_draft_results.xlsx'.format(self.curr_yr)
+        self.indv_depth_charts = '{}/indv_depth_charts.xlsx'.format(
+            self.curr_yr)
+        self.draft_params_pkl = '{}/draft_params.pkl'.format(self.curr_yr)
+
+        # Draft trackers
+        self.pick = 1
+        self.owner_idx = 0
+        self.round_num = 1
+
+        # Resume draft if previously started
+        if os.path.exists(self.draft_params_pkl):
+            with open(self.draft_params_pkl, 'rb') as f:
+                draft_params = pickle.load(f)
+            self.pick, self.owner_idx, self.round_num, self.player_pool, \
+                self.draft_history, self.draft_history_indv, \
+                self.depth_charts = draft_params
+
+    def _determine_keepers(self):
+        self.keepers = {}
+        for owner in self.owners:
             input_str = '{}, who would you like to keep? '.format(bold(owner))
             player = input(input_str)
             while True:
@@ -36,9 +104,9 @@ def determine_keepers(curr_yr, owners, last_yr_df, player_pool):
                     player = None
                     round_lost = None
                     break
-                if player in last_yr_df.index:
-                    if last_yr_df.Round[player] > 1:
-                        round_lost = last_yr_df.Round[player] - 1
+                if player in self.last_yr_df.index:
+                    if self.last_yr_df.Round[player] > 1:
+                        round_lost = self.last_yr_df.Round[player] - 1
                         break
                     else:
                         input_str = '\nYou drafted that player in the 1st ' \
@@ -46,7 +114,7 @@ def determine_keepers(curr_yr, owners, last_yr_df, player_pool):
                                     'would you like to keep? '
                         player = input(input_str)
                 else:
-                    if player in player_pool.index.tolist():
+                    if player in self.player_pool.index.tolist():
                         round_lost = 16
                         break
                     player = input('\nThat player is not in the player pool. '
@@ -56,22 +124,14 @@ def determine_keepers(curr_yr, owners, last_yr_df, player_pool):
             if player:
                 print('{} will count as your {} pick.\n'.format(
                     bold(player), bold(ordinal(round_lost) + ' Round')))
-            keepers[owner] = {'player': player, 'round': round_lost}
-        with open(keepers_pkl, 'wb') as f:
-            pickle.dump(keepers, f)
-    return keepers, player_pool
+            self.keepers[owner] = {'player': player, 'round': round_lost}
+        with open(self.keepers_pkl, 'wb') as f:
+            pickle.dump(self.keepers, f)
 
-
-# Helper function - draft order
-def determine_draft_order(curr_yr, owners):
-    draft_order_pkl = '{}/draft_order.pkl'.format(curr_yr)
-    if os.path.exists(draft_order_pkl):
-        with open(draft_order_pkl, 'rb') as f:
-            draft_order = pickle.load(f)
-    else:
-        random.shuffle(owners)
-        draft_order = [None] * len(owners)
-        for owner in owners:
+    def _determine_draft_order(self):
+        random.shuffle(self.owners)
+        self.draft_order = [None] * len(self.owners)
+        for owner in self.owners:
             input_str = "\n{}, you're up!\nWhich draft slot would you " \
                         "like? ".format(bold(owner))
             slot = int(input(input_str))
@@ -79,252 +139,191 @@ def determine_draft_order(curr_yr, owners):
                 if slot > 8 or slot < 1:
                     input_str = '\nSelect a number between 1 and 8: '
                     slot = int(input(input_str))
-                elif draft_order[slot - 1]:
-                    input_str = '\nThat draft slot is already taken. Pick a ' \
-                                'different one: '
+                elif self.draft_order[slot - 1]:
+                    input_str = '\nThat draft slot is already taken. ' \
+                                'Pick a different one: '
                     slot = int(input(input_str))
                 else:
-                    draft_order[slot - 1] = owner
+                    self.draft_order[slot - 1] = owner
                     break
-        with open(draft_order_pkl, 'wb') as f:
-            pickle.dump(draft_order, f)
-    return draft_order
+        with open(self.draft_order_pkl, 'wb') as f:
+            pickle.dump(self.draft_order, f)
 
+    def pre_draft(self):
+        # Create folder for current year if need be
+        if not os.path.exists(self.curr_yr):
+            os.mkdir(self.curr_yr)
 
-# Pre-draft function
-def pre_draft():
-    # Set parameters
-    curr_yr = str(datetime.datetime.now().year)
-    last_yr = str(int(curr_yr) - 1)
+        # Determine keepers if not already done for current year
+        if self.keepers is None:
+            self._determine_keepers()
 
-    # Create folder for current year if need be
-    if not os.path.exists(curr_yr):
-        os.mkdir(curr_yr)
+        # Determine draft order
+        if self.draft_order is None:
+            self._determine_draft_order()
 
-    # Read last year's Draft Results into Pandas DataFrame
-    last_yr_res = '{}/draft_results.xlsx'.format(last_yr)
-    last_yr_indv = '{}/indv_draft_results.xlsx'.format(last_yr)
-    last_yr_df = pd.read_excel(last_yr_res, index_col=2)
+    @staticmethod
+    def _fill_depth_chart(owner, position, depth_charts):
+        spots = depth_charts[owner].index.tolist()
+        spot = ''
+        for spot in spots:
+            if position in spot and pd.isnull(
+                    depth_charts[owner].at[spot, 'Player']):
+                return spot
+            elif (position == 'RB' or position == 'WR') and spot == \
+                    'FLEX' and pd.isnull(depth_charts[owner].at[
+                                             spot, 'Player']):
+                return spot
+            elif 'Bench' in spot and pd.isnull(
+                    depth_charts[owner].at[spot, 'Player']):
+                return spot
+        return spot[:-1] + str(int(spot[-1]) + 1)
 
-    # Load player pool
-    raw_data = '{}/raw_data.xlsx'.format(curr_yr)
-    player_pool = pd.read_excel(raw_data, index_col=[0])
-    player_pool['Position'] = player_pool['Position'].str.strip()
-
-    # Determine keepers if not already done for current year
-    owners = pd.ExcelFile(last_yr_indv).sheet_names
-    keepers, player_pool = determine_keepers(
-        curr_yr, owners, last_yr_df, player_pool)
-
-    # Determine draft order
-    draft_order = determine_draft_order(curr_yr, owners)
-    return curr_yr, player_pool, owners, keepers, draft_order
-
-
-# Draft
-
-# Draft helper function - fill depth chart
-def fill_depth_chart(owner, position, depth_charts):
-    spots = depth_charts[owner].index.tolist()
-    spot = ''
-    for spot in spots:
-        if position in spot and pd.isnull(
-                depth_charts[owner].at[spot, 'Player']):
-            return spot
-        elif (position == 'RB' or position == 'WR') and spot == 'FLEX' and \
-                pd.isnull(depth_charts[owner].at[spot, 'Player']):
-            return spot
-        elif 'Bench' in spot and pd.isnull(
-                depth_charts[owner].at[spot, 'Player']):
-            return spot
-    return spot[:-1] + str(int(spot[-1]) + 1)
-
-
-# Draft helper function - keeper management
-def manage_keepers(keepers, owners, player_pool, draft_order, draft_history,
-                   draft_history_indv, depth_charts):
-    for owner, keeper_dct in keepers.items():
-        # Extract relevant info from keeper_dct
-        player = keeper_dct['player']
-        if player:
-            round_num = keeper_dct['round']
-
-            the_pick = player_pool.loc[player]
-
-            if round_num % 2:
-                spot_in_rd = draft_order.index(owner)
-            else:
-                spot_in_rd = len(owners) - draft_order.index(owner)
-            pick = (round_num - 1) * len(owners) + spot_in_rd
-
-            # Remove keeper from player pool
-            player_pool = player_pool.drop(player)
-
-            # Put keepers in draft histories and depth charts
-            draft_history.loc[pick] = [str(round_num), player, the_pick[
-                'Position'], the_pick['Bye'], the_pick[
-                'ESPN Projection'], owner]
-            draft_history_indv[owner].loc[pick] = [str(
-                round_num), player, the_pick['Position'], the_pick[
+    def _update_data_structs(self, player, the_pick, owner):
+        # Update depth chart / draft histories
+        self.draft_history.loc[self.pick] = [
+            str(self.round_num), player, the_pick['Position'], the_pick[
+                'Bye'], the_pick['ESPN Projection'], owner]
+        self.draft_history_indv[owner].loc[self.pick] = [
+            str(self.round_num), player, the_pick['Position'], the_pick[
                 'Bye'], the_pick['ESPN Projection']]
-            index = fill_depth_chart(owner, the_pick['Position'], depth_charts)
-            depth_charts[owner].loc[index] = [player, the_pick[
-                'Bye'], the_pick['ESPN Projection']]
-            depth_charts[owner] = depth_charts[owner].astype(
-                {'Bye': pd.Int64Dtype()})
-    return player_pool, draft_history, draft_history_indv, depth_charts
+        index = self._fill_depth_chart(
+            owner, the_pick['Position'], self.depth_charts)
+        self.depth_charts[owner].loc[index] = [
+            player, the_pick['Bye'], the_pick['ESPN Projection']]
+        self.depth_charts[owner] = self.depth_charts[
+            owner].astype({'Bye': pd.Int64Dtype()})
 
+        # Sort draft histories
+        self.draft_history = self.draft_history.sort_values(
+            'Pick Overall')
+        for own in self.owners:
+            self.draft_history_indv[own] = \
+                self.draft_history_indv[own].sort_values(
+                    'Pick Overall')
 
-# Draft function
-def draft(curr_yr, player_pool, owners, keepers, draft_order, num_rounds=16):
-    # Initialize draft history
-    # num_picks = len(draft_order) * num_rounds
-    column_names = [
-        'Round', 'Player', 'Position', 'Bye', 'ESPN Projection', 'Owner']
-    draft_history = pd.DataFrame(index=[], columns=column_names)
-    draft_history.index.name = 'Pick Overall'
+    def _save_data(self):
+        # Save excel spreedsheets
+        writer = pd.ExcelWriter(self.results)
+        self.draft_history.to_excel(writer, 'Draft Results')
+        writer.save()
 
-    # Initialize individual draft histories and depth charts
-    draft_history_indv = {}
-    depth_charts = {}
-    for owner in draft_order:
-        column_names = [
-            'Round', 'Player', 'Position', 'Bye', 'ESPN Projection']
-        draft_history_indv[owner] = pd.DataFrame(
-            index=[], columns=column_names)
-        draft_history_indv[owner].index.name = 'Pick Overall'
-        depth_charts[owner] = pd.read_excel(
-            'depth_chart_blank.xlsx', index_col=[0])
-    
-    # Keeper management
-    player_pool, draft_history, draft_history_indv, depth_charts = \
-        manage_keepers(keepers, owners, player_pool, draft_order,
-                       draft_history, draft_history_indv, depth_charts)
-    
-    # Perform draft
-    results = '{}/draft_results.xlsx'.format(curr_yr)
-    indv_results = '{}/indv_draft_results.xlsx'.format(curr_yr)
-    indv_depth_charts = '{}/indv_depth_charts.xlsx'.format(curr_yr)
+        writer2 = pd.ExcelWriter(self.indv_results)
+        for owner, df in self.draft_history_indv.items():
+            df.to_excel(writer2, owner)
+        writer2.save()
 
-    input_str = """You can either enter who you would like to draft or perform
-    any of the following options by entering it's corresponding number:
+        writer3 = pd.ExcelWriter(self.indv_depth_charts)
+        for owner, df in self.depth_charts.items():
+            df.to_excel(writer3, owner)
+        writer3.save()
 
-    1) Look at who you already have drafted
-    2) View your current depth chart
-    3) See Mike Clay's best players available
-    4) See the last 10 players drafted
-    5) Look at the full draft history
+        # Save draft parameters
+        draft_params = [self.pick + 1, self.owner_idx + 1, self.round_num,
+                        self.player_pool, self.draft_history,
+                        self.draft_history_indv, self.depth_charts]
 
-    """
+        with open(self.draft_params_pkl, 'wb') as f:
+            pickle.dump(draft_params, f)
 
-    draft_params_pkl = '{}/draft_params.pkl'.format(curr_yr)
-    if os.path.exists(draft_params_pkl):
-        with open(draft_params_pkl, 'rb') as f:
-            draft_params = pickle.load(f)
-        pick, owner_idx, round_num, player_pool, draft_history, \
-            draft_history_indv, depth_charts = draft_params
-    else:
-        pick = 1
-        owner_idx = 0
-        round_num = 1
+    def _manage_keepers(self):
+        for owner, keeper_dct in self.keepers.items():
+            # Extract relevant info from keeper_dct
+            player = keeper_dct['player']
+            if player:
+                round_num = keeper_dct['round']
 
-    while round_num < num_rounds + 1:
-        print('\n\n\n\n{}'.format(bold('ROUND ' + str(round_num))))
-        while owner_idx < len(draft_order):
-            if round_num % 2:
-                owner = draft_order[owner_idx]
-            else:
-                owner = draft_order[-1 - owner_idx]
+                the_pick = self.player_pool.loc[player]
 
-            print("\n\n{}, you're up!".format(bold(owner)))
-            while True:
-                # Check if keeper should be taken this round
-                if keepers[owner]['round'] == round_num:
-                    player = keepers[owner]['player']
-                    print('\n{} Kept {} with the {} Overall Pick'.format(
-                        bold(owner), bold(player), bold(ordinal(pick))))
-                    pick += 1
-                    owner_idx += 1
-                    break
-
-                option = input(input_str)
-                if option == '1':
-                    display(draft_history_indv[owner].sort_values(
-                        'Pick Overall'))
-                elif option == '2':
-                    display(depth_charts[owner])
-                elif option == '3':
-                    display(player_pool.head(10))
-                elif option == '4':
-                    display(draft_history[draft_history.index < pick].tail(10))
-                elif option == '5':
-                    display(draft_history.sort_values('Pick Overall'))
+                if round_num % 2:
+                    spot_in_rd = self.draft_order.index(owner)
                 else:
-                    player = option
-                    while True:
-                        if option == '9':
-                            player = player_pool.head(1).index[0]
-                        if player in player_pool.index.tolist():
-                            the_pick = player_pool.loc[player]
-                            player_pool = player_pool.drop(player)
-                            break
-                        player = input('\nThat player is not in the player '
-                                       'pool. Please re-enter the player, '
-                                       'making sure you spelled his name '
-                                       'correctly: ')
+                    spot_in_rd = len(self.owners) - self.draft_order.index(
+                        owner)
+                pick = (round_num - 1) * len(self.owners) + spot_in_rd
 
-                    # Update depth chart / draft histories
-                    draft_history.loc[pick] = [
-                        str(round_num), player, the_pick['Position'], the_pick[
-                            'Bye'], the_pick['ESPN Projection'], owner]
-                    draft_history_indv[owner].loc[pick] = [
-                        str(round_num), player, the_pick['Position'], the_pick[
-                            'Bye'], the_pick['ESPN Projection']]
-                    index = fill_depth_chart(
-                        owner, the_pick['Position'], depth_charts)
-                    depth_charts[owner].loc[index] = [
-                        player, the_pick['Bye'], the_pick['ESPN Projection']]
-                    depth_charts[owner] = depth_charts[owner].astype(
-                        {'Bye': pd.Int64Dtype()})
+                # Remove keeper from player pool
+                self.player_pool = self.player_pool.drop(player)
 
-                    # Sort draft histories
-                    draft_history = draft_history.sort_values('Pick Overall')
-                    for own in owners:
-                        draft_history_indv[own] = draft_history_indv[
-                            own].sort_values('Pick Overall')
+                # Put keepers in draft histories and depth charts
+                self.draft_history.loc[pick] = [
+                    str(round_num), player, the_pick['Position'],
+                    the_pick['Bye'], the_pick['ESPN Projection'], owner]
+                self.draft_history_indv[owner].loc[pick] = [str(
+                    round_num), player, the_pick['Position'], the_pick[
+                    'Bye'], the_pick['ESPN Projection']]
+                index = self._fill_depth_chart(
+                    owner, the_pick['Position'], self.depth_charts)
+                self.depth_charts[owner].loc[index] = [player, the_pick[
+                    'Bye'], the_pick['ESPN Projection']]
+                self.depth_charts[owner] = self.depth_charts[owner].astype(
+                    {'Bye': pd.Int64Dtype()})
 
-                    # Display pick
-                    print('\n{} Took {} with the {} Overall Pick'.format(
-                        bold(owner), bold(player), bold(ordinal(pick))))
+    def _one_pick(self, owner):
+        # Notify owner they are up
+        print("\n\n{}, you're on the clock!".format(bold(owner)))
 
-                    # Save excel spreedsheets
-                    writer = pd.ExcelWriter(results)
-                    draft_history.to_excel(writer, 'Draft Results')
-                    writer.save()
+        # Check if keeper should be taken this round
+        if self.keepers[owner]['round'] == self.round_num:
+            player = self.keepers[owner]['player']
+            print('\n{} Kept {} with the {} Overall Pick'.format(
+                bold(owner), bold(player), bold(ordinal(self.pick))))
+            return
 
-                    writer2 = pd.ExcelWriter(indv_results)
-                    for owner, df in draft_history_indv.items():
-                        df.to_excel(writer2, owner)
-                    writer2.save()
+        while True:
+            option = input(self.input_str)
+            if option == '1':
+                display(self.draft_history_indv[owner].sort_values(
+                    'Pick Overall'))
+            elif option == '2':
+                display(self.depth_charts[owner])
+            elif option == '3':
+                display(self.player_pool.head(10))
+            elif option == '4':
+                display(self.draft_history[
+                            self.draft_history.index < self.pick].tail(10))
+            elif option == '5':
+                display(self.draft_history.sort_values('Pick Overall'))
+            else:
+                player = option
+                while True:
+                    if option == '9':
+                        player = self.player_pool.head(1).index[0]
+                    if player in self.player_pool.index.tolist():
+                        the_pick = self.player_pool.loc[player]
+                        self.player_pool = self.player_pool.drop(
+                            player)
+                        break
+                    player = input('\nThat player is not in the player pool. '
+                                   'Please re-enter the player, making sure '
+                                   'you spelled his name correctly: ')
 
-                    writer3 = pd.ExcelWriter(indv_depth_charts)
-                    for owner, df in depth_charts.items():
-                        df.to_excel(writer3, owner)
-                    writer3.save()
+                # Display pick
+                print('\n{} Took {} with the {} Overall Pick'.format(
+                    bold(owner), bold(player), bold(ordinal(self.pick))))
 
-                    pick += 1
-                    owner_idx += 1
+                self._update_data_structs(player, the_pick, owner)
+                self._save_data()
+                return
 
-                    # Save draft parameters
-                    draft_params = [pick, owner_idx, round_num, player_pool,
-                                    draft_history, draft_history_indv,
-                                    depth_charts]
+    def draft(self):
+        # Keeper management
+        self._manage_keepers()
 
-                    with open(draft_params_pkl, 'wb') as f:
-                        pickle.dump(draft_params, f)
+        # Perform draft
+        while self.round_num < self.num_rounds + 1:
+            print('\n\n\n\n{}'.format(bold('ROUND ' + str(self.round_num))))
+            while self.owner_idx < len(self.draft_order):
+                if self.round_num % 2:
+                    curr_owner = self.draft_order[self.owner_idx]
+                else:
+                    curr_owner = self.draft_order[-1 - self.owner_idx]
 
-                    break
+                self._one_pick(curr_owner)
 
-        round_num += 1
-        owner_idx = 0
-    return
+                self.pick += 1
+                self.owner_idx += 1
+
+            self.round_num += 1
+            self.owner_idx = 0
+        return
