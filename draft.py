@@ -26,7 +26,6 @@ class Draft:
         self.format = draft_format
         self.curr_yr = str(datetime.datetime.now().year)
         self.last_yr = str(int(self.curr_yr) - 1)
-        self.owners = pd.ExcelFile(self.last_yr_indv).sheet_names
         self.num_rounds = 16
         self.input_str = """
         You can either enter who you would like to draft or perform any of the 
@@ -40,7 +39,20 @@ class Draft:
 
         """
 
+        # File paths
+        self.keepers_pkl = '{}/keepers.pkl'.format(self.curr_yr)
+        self.draft_order_pkl = '{}/draft_order.pkl'.format(self.curr_yr)
+        self.last_yr_res = '{}/draft_results.xlsx'.format(self.last_yr)
+        self.raw_data = '{}/raw_data.xlsx'.format(self.curr_yr)
+        self.last_yr_indv = '{}/indv_draft_results.xlsx'.format(self.last_yr)
+        self.results = '{}/draft_results.xlsx'.format(self.curr_yr)
+        self.indv_results = '{}/indv_draft_results.xlsx'.format(self.curr_yr)
+        self.indv_depth_charts = '{}/indv_depth_charts.xlsx'.format(
+            self.curr_yr)
+        self.draft_params_pkl = '{}/draft_params.pkl'.format(self.curr_yr)
+
         # Data structures
+        self.owners = pd.ExcelFile(self.last_yr_indv).sheet_names
         self.last_yr_df = pd.read_excel(self.last_yr_res, index_col=2)
         self.player_pool = pd.read_excel(self.raw_data, index_col=[0])
         self.player_pool['Position'] = self.player_pool['Position'].str.strip()
@@ -68,18 +80,6 @@ class Draft:
             self.draft_history_indv[owner].index.name = 'Pick Overall'
             self.depth_charts[owner] = pd.read_excel(
                 'depth_chart_blank.xlsx', index_col=[0])
-
-        # File paths
-        self.keepers_pkl = '{}/keepers.pkl'.format(self.curr_yr)
-        self.draft_order_pkl = '{}/draft_order.pkl'.format(self.curr_yr)
-        self.last_yr_res = '{}/draft_results.xlsx'.format(self.last_yr)
-        self.raw_data = '{}/raw_data.xlsx'.format(self.curr_yr)
-        self.last_yr_indv = '{}/indv_draft_results.xlsx'.format(self.last_yr)
-        self.results = '{}/draft_results.xlsx'.format(self.curr_yr)
-        self.indv_results = '{}/indv_draft_results.xlsx'.format(self.curr_yr)
-        self.indv_depth_charts = '{}/indv_depth_charts.xlsx'.format(
-            self.curr_yr)
-        self.draft_params_pkl = '{}/draft_params.pkl'.format(self.curr_yr)
 
         # Draft trackers
         self.pick = 1
