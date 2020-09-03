@@ -153,23 +153,6 @@ class Draft:
         with open(self.draft_order_pkl, 'wb') as f:
             pickle.dump(self.draft_order, f)
 
-    def pre_draft(self):
-        # Create folder for current year if need be
-        if not os.path.exists(self.curr_yr):
-            os.mkdir(self.curr_yr)
-
-        # Determine keepers if not already done for current year
-        if self.keepers is None:
-            self._determine_keepers()
-
-        # Determine draft order
-        if self.draft_order is None:
-            self._determine_draft_order()
-
-        # Keeper management
-        if not os.path.exists(self.draft_params_pkl):
-            self._manage_keepers()
-
     @staticmethod
     def _fill_depth_chart(owner, position, depth_charts):
         spots = depth_charts[owner].index.tolist()
@@ -256,6 +239,23 @@ class Draft:
                 # Put keeper in draft histories and depth charts
                 self._update_data_structs(player, the_pick, owner)
                 self._save_data()
+
+    def pre_draft(self):
+        # Create folder for current year if need be
+        if not os.path.exists(self.curr_yr):
+            os.mkdir(self.curr_yr)
+
+        # Determine keepers if not already done for current year
+        if self.keepers is None:
+            self._determine_keepers()
+
+        # Determine draft order
+        if self.draft_order is None:
+            self._determine_draft_order()
+
+        # Keeper management
+        if not os.path.exists(self.draft_params_pkl):
+            self._manage_keepers()
 
     def _one_pick(self, owner):
         # Notify owner they are up
