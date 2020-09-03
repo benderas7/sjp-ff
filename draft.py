@@ -162,6 +162,10 @@ class Draft:
         if self.draft_order is None:
             self._determine_draft_order()
 
+        # Keeper management
+        if not os.path.exists(self.draft_params_pkl):
+            self._manage_keepers()
+
     @staticmethod
     def _fill_depth_chart(owner, position, depth_charts):
         spots = depth_charts[owner].index.tolist()
@@ -240,24 +244,14 @@ class Draft:
                 else:
                     spot_in_rd = len(self.owners) - self.draft_order.index(
                         owner)
-                pick = (round_num - 1) * len(self.owners) + spot_in_rd
+                self.pick = (round_num - 1) * len(self.owners) + spot_in_rd
 
                 # Remove keeper from player pool
                 self.player_pool = self.player_pool.drop(player)
 
-                # Put keepers in draft histories and depth charts
-                self.draft_history.loc[pick] = [
-                    str(round_num), player, the_pick['Position'],
-                    the_pick['Bye'], the_pick['ESPN Projection'], owner]
-                self.draft_history_indv[owner].loc[pick] = [str(
-                    round_num), player, the_pick['Position'], the_pick[
-                    'Bye'], the_pick['ESPN Projection']]
-                index = self._fill_depth_chart(
-                    owner, the_pick['Position'], self.depth_charts)
-                self.depth_charts[owner].loc[index] = [player, the_pick[
-                    'Bye'], the_pick['ESPN Projection']]
-                self.depth_charts[owner] = self.depth_charts[owner].astype(
-                    {'Bye': pd.Int64Dtype()})
+                # Put keeper in draft histories and depth charts
+                self._update_data_structs(player, the_pick, owner)
+                self._save_data()
 
     def _one_pick(self, owner):
         # Notify owner they are up
@@ -302,14 +296,12 @@ class Draft:
                 print('\n{} Took {} with the {} Overall Pick'.format(
                     bold(owner), bold(player), bold(ordinal(self.pick))))
 
+                # Put player in draft histories and depth charts
                 self._update_data_structs(player, the_pick, owner)
                 self._save_data()
                 return
 
     def draft(self):
-        # Keeper management
-        self._manage_keepers()
-
         # Perform draft
         while self.round_num < self.num_rounds + 1:
             print('\n\n\n\n{}'.format(bold('ROUND ' + str(self.round_num))))
