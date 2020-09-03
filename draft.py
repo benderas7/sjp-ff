@@ -66,17 +66,19 @@ class Draft:
                 self.draft_order = pickle.load(f)
         else:
             self.draft_order = None
-        column_names = [
-            'Round', 'Player', 'Position', 'Bye', 'ESPN Projection', 'Owner']
+        if self.format == 'Snake':
+            column_names = ['Round', 'Player', 'Position', 'Bye',
+                            'ESPN Projection', 'Owner']
+        else:
+            column_names = ['Salary', 'Player', 'Position', 'Bye',
+                            'ESPN Projection', 'Owner']
         self.draft_history = pd.DataFrame(index=[], columns=column_names)
         self.draft_history.index.name = 'Pick Overall'
         self.draft_history_indv = {}
         self.depth_charts = {}
         for owner in self.owners:
-            column_names = [
-                'Round', 'Player', 'Position', 'Bye', 'ESPN Projection']
             self.draft_history_indv[owner] = pd.DataFrame(
-                index=[], columns=column_names)
+                index=[], columns=column_names[:-1])
             self.draft_history_indv[owner].index.name = 'Pick Overall'
             self.depth_charts[owner] = pd.read_excel(
                 'depth_chart_blank.xlsx', index_col=[0])
