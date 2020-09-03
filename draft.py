@@ -122,8 +122,12 @@ class Draft:
                                    'you spelled his name correctly: ')
 
             if player:
-                print('{} will count as your {} pick.\n'.format(
-                    bold(player), bold(ordinal(round_lost) + ' Round')))
+                if self.format == 'Snake:':
+                    print('{} will count as your {} pick.\n'.format(
+                        bold(player), bold(ordinal(round_lost) + ' Round')))
+                elif self.format == 'Salary Cap':
+                    print('You have elected to keep {}.\n'.format(
+                        bold(player)))
             self.keepers[owner] = {'player': player, 'round': round_lost}
         with open(self.keepers_pkl, 'wb') as f:
             pickle.dump(self.keepers, f)
