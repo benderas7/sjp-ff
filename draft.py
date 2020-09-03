@@ -125,10 +125,12 @@ class Draft:
                 if self.format == 'Snake:':
                     print('{} will count as your {} pick.\n'.format(
                         bold(player), bold(ordinal(round_lost) + ' Round')))
+                    self.keepers[owner] = {
+                        'player': player, 'round': round_lost}
                 elif self.format == 'Salary Cap':
                     print('You have elected to keep {}.\n'.format(
                         bold(player)))
-            self.keepers[owner] = {'player': player, 'round': round_lost}
+                    self.keepers[owner] = {'player': player, 'round': 0}
         with open(self.keepers_pkl, 'wb') as f:
             pickle.dump(self.keepers, f)
 
