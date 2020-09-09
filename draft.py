@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import random
 import os
 import datetime
@@ -45,11 +46,12 @@ class Draft:
             auction or perform any of the following options by entering it's 
             corresponding number:
 
-            1) Look at who you already have drafted
-            2) View your current depth chart
-            3) See Mike Clay's best players available
+            1) Look at individual draft histories
+            2) View all current depth charts
+            3) See expected salaries and point projections
             4) See the last 10 players drafted
             5) Look at the full draft history
+            6) Check how much a player is worth
 
             """
 
@@ -289,10 +291,16 @@ class Draft:
         while True:
             option = input(self.input_str)
             if option == '1':
-                display(self.draft_history_indv[owner].sort_values(
-                    'Pick Overall'))
+                all_indv_draft_histories = pd.concat(
+                    self.draft_history_indv.values(),
+                    keys=self.draft_history_indv.keys())
+                display(all_indv_draft_histories)
             elif option == '2':
-                display(self.depth_charts[owner])
+                all_depth_charts = pd.concat(
+                    self.depth_charts, axis=1).replace(np.nan, '', regex=True)
+                mid_index = len(self.owners) * 3 // 2
+                display(all_depth_charts.iloc[:, :mid_index])
+                display(all_depth_charts.iloc[:, mid_index:])
             elif option == '3':
                 display(self.player_pool.head(10))
             elif option == '4':
@@ -300,6 +308,13 @@ class Draft:
                             self.draft_history.index < self.pick].tail(10))
             elif option == '5':
                 display(self.draft_history.sort_values('Pick Overall'))
+            elif option == '6':
+                check = input('Enter the player you would like to check the '
+                              'salary of: ')
+                if check in self.player_pool.index:
+                    display(self.player_pool.loc[check])
+                else:
+                    print('\nThat player is not in the player pool.')
             else:
                 player = option
                 while True:
@@ -326,13 +341,6 @@ class Draft:
     def _one_pick_salary_cap(self, owner):
         # Notify owner they are up
         print("\n\n{}, you're up to nominate!".format(bold(owner)))
-
-        # Check if keeper should be taken this round
-        if self.keepers[owner]['round'] == self.round_num:
-            player = self.keepers[owner]['player']
-            print('\n{} Kept {} with the {} Overall Pick'.format(
-                bold(owner), bold(player), bold(ordinal(self.pick))))
-            return
 
         while True:
             option = input(self.input_str)
