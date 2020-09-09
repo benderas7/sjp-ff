@@ -291,16 +291,10 @@ class Draft:
         while True:
             option = input(self.input_str)
             if option == '1':
-                all_indv_draft_histories = pd.concat(
-                    self.draft_history_indv.values(),
-                    keys=self.draft_history_indv.keys())
-                display(all_indv_draft_histories)
+                display(self.draft_history_indv[owner].sort_values(
+                    'Pick Overall'))
             elif option == '2':
-                all_depth_charts = pd.concat(
-                    self.depth_charts, axis=1).replace(np.nan, '', regex=True)
-                mid_index = len(self.owners) * 3 // 2
-                display(all_depth_charts.iloc[:, :mid_index])
-                display(all_depth_charts.iloc[:, mid_index:])
+                display(self.depth_charts[owner])
             elif option == '3':
                 display(self.player_pool.head(10))
             elif option == '4':
@@ -308,13 +302,6 @@ class Draft:
                             self.draft_history.index < self.pick].tail(10))
             elif option == '5':
                 display(self.draft_history.sort_values('Pick Overall'))
-            elif option == '6':
-                check = input('Enter the player you would like to check the '
-                              'salary of: ')
-                if check in self.player_pool.index:
-                    display(self.player_pool.loc[check])
-                else:
-                    print('\nThat player is not in the player pool.')
             else:
                 player = option
                 while True:
@@ -345,10 +332,16 @@ class Draft:
         while True:
             option = input(self.input_str)
             if option == '1':
-                display(self.draft_history_indv[owner].sort_values(
-                    'Pick Overall'))
+                all_indv_draft_histories = pd.concat(
+                    self.draft_history_indv.values(),
+                    keys=self.draft_history_indv.keys())
+                display(all_indv_draft_histories)
             elif option == '2':
-                display(self.depth_charts[owner])
+                all_depth_charts = pd.concat(
+                    self.depth_charts, axis=1).replace(np.nan, '', regex=True)
+                mid_index = len(self.owners) * 3 // 2
+                display(all_depth_charts.iloc[:, :mid_index])
+                display(all_depth_charts.iloc[:, mid_index:])
             elif option == '3':
                 display(self.player_pool.head(10))
             elif option == '4':
@@ -356,6 +349,13 @@ class Draft:
                             self.draft_history.index < self.pick].tail(10))
             elif option == '5':
                 display(self.draft_history.sort_values('Pick Overall'))
+            elif option == '6':
+                check = input('Enter the player you would like to check the '
+                              'salary of: ')
+                if check in self.player_pool.index:
+                    display(self.player_pool.loc[check])
+                else:
+                    print('\nThat player is not in the player pool.')
             else:
                 player = option
                 while True:
