@@ -27,17 +27,31 @@ class Draft:
         self.curr_yr = str(datetime.datetime.now().year)
         self.last_yr = str(int(self.curr_yr) - 1)
         self.num_rounds = 16
-        self.input_str = """
-        You can either enter who you would like to draft or perform any of the 
-        following options by entering it's corresponding number:
+        if self.format == 'Snake':
+            self.input_str = """
+            You can either enter who you would like to draft or perform any of 
+            the following options by entering it's corresponding number:
+    
+            1) Look at who you already have drafted
+            2) View your current depth chart
+            3) See Mike Clay's best players available
+            4) See the last 10 players drafted
+            5) Look at the full draft history
+    
+            """
+        else:
+            self.input_str = """
+            You can either enter who you would like to nominate for the 
+            auction or perform any of the following options by entering it's 
+            corresponding number:
 
-        1) Look at who you already have drafted
-        2) View your current depth chart
-        3) See Mike Clay's best players available
-        4) See the last 10 players drafted
-        5) Look at the full draft history
+            1) Look at who you already have drafted
+            2) View your current depth chart
+            3) See Mike Clay's best players available
+            4) See the last 10 players drafted
+            5) Look at the full draft history
 
-        """
+            """
 
         # File paths
         self.keepers_pkl = '{}/keepers.pkl'.format(self.curr_yr)
@@ -261,9 +275,57 @@ class Draft:
         if not os.path.exists(self.draft_params_pkl):
             self._manage_keepers()
 
-    def _one_pick(self, owner):
+    def _one_pick_snake(self, owner):
         # Notify owner they are up
         print("\n\n{}, you're on the clock!".format(bold(owner)))
+
+        # Check if keeper should be taken this round
+        if self.keepers[owner]['round'] == self.round_num:
+            player = self.keepers[owner]['player']
+            print('\n{} Kept {} with the {} Overall Pick'.format(
+                bold(owner), bold(player), bold(ordinal(self.pick))))
+            return
+
+        while True:
+            option = input(self.input_str)
+            if option == '1':
+                display(self.draft_history_indv[owner].sort_values(
+                    'Pick Overall'))
+            elif option == '2':
+                display(self.depth_charts[owner])
+            elif option == '3':
+                display(self.player_pool.head(10))
+            elif option == '4':
+                display(self.draft_history[
+                            self.draft_history.index < self.pick].tail(10))
+            elif option == '5':
+                display(self.draft_history.sort_values('Pick Overall'))
+            else:
+                player = option
+                while True:
+                    if option == '9':
+                        player = self.player_pool.head(1).index[0]
+                    if player in self.player_pool.index.tolist():
+                        the_pick = self.player_pool.loc[player]
+                        self.player_pool = self.player_pool.drop(
+                            player)
+                        break
+                    player = input('\nThat player is not in the player pool. '
+                                   'Please re-enter the player, making sure '
+                                   'you spelled his name correctly: ')
+
+                # Display pick
+                print('\n{} Took {} with the {} Overall Pick'.format(
+                    bold(owner), bold(player), bold(ordinal(self.pick))))
+
+                # Put player in draft histories and depth charts
+                self._update_data_structs(player, the_pick, owner)
+                self._save_data()
+                return
+
+    def _one_pick_salary_cap(self, owner):
+        # Notify owner they are up
+        print("\n\n{}, you're up to nominate!".format(bold(owner)))
 
         # Check if keeper should be taken this round
         if self.keepers[owner]['round'] == self.round_num:
@@ -319,7 +381,10 @@ class Draft:
                 else:
                     curr_owner = self.draft_order[-1 - self.owner_idx]
 
-                self._one_pick(curr_owner)
+                if self.format == 'Snake':
+                    self._one_pick_snake(curr_owner)
+                elif self.format == 'Salary Cap':
+                    self._one_pick_salary_cap(curr_owner)
 
                 self.pick += 1
                 self.owner_idx += 1
