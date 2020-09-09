@@ -5,6 +5,9 @@ import os
 import datetime
 import pickle
 from IPython.display import display
+from threading import Thread, Event
+import ipywidgets as widgets
+import time
 
 
 # Helper function for bolding text string
@@ -19,6 +22,66 @@ def ordinal(num):
     return str(num) + lst[num - 1]
 
 
+class ReusableThread(Thread):
+    """
+    Taken from:
+    https://www.codeproject.com/Tips/1271787/Python-Reusable-Thread-Class
+
+    This class provides code for a restartale / reusable thread
+
+    join() will only wait for one (target)functioncall to finish
+    finish() will finish the whole thread (after that, it's not restartable
+    anymore)
+
+    """
+
+    def __init__(self, target, args):
+        self._startSignal = Event()
+        self._oneRunFinished = Event()
+        self._finishIndicator = False
+        self._callable = target
+        self._callableArgs = args
+
+        Thread.__init__(self)
+
+    def restart(self):
+        """make sure to always call join() before restarting"""
+        self._startSignal.set()
+
+    def run(self):
+        """ This class will reprocess the object "processObject" forever.
+        Through the change of data inside processObject and start signals
+        we can reuse the thread's resources"""
+
+        self.restart()
+        while True:
+            # wait until we should process
+            self._startSignal.wait()
+
+            self._startSignal.clear()
+
+            if self._finishIndicator:  # check, if we want to stop
+                self._oneRunFinished.set()
+                return
+
+            # call the threaded function
+            self._callable(*self._callableArgs)
+
+            # notify about the run's end
+            self._oneRunFinished.set()
+
+    def join(self):
+        """ This join will only wait for one single run (target functioncall)
+        to be finished"""
+        self._oneRunFinished.wait()
+        self._oneRunFinished.clear()
+
+    def finish(self):
+        self._finishIndicator = True
+        self.restart()
+        self.join()
+
+
 class Draft:
 
     def __init__(self, draft_format):
@@ -27,6 +90,8 @@ class Draft:
         self.format = draft_format
         self.curr_yr = str(datetime.datetime.now().year)
         self.last_yr = str(int(self.curr_yr) - 1)
+        self.clock_num_sec = 10
+        self.clock = None
         self.num_rounds = 16
         if self.format == 'Snake':
             self.input_str = """
@@ -325,6 +390,33 @@ class Draft:
                 self._save_data()
                 return
 
+    def _bidding(self, player):
+        # Remove player from player pool
+        the_pick = self.player_pool.loc[player]
+        self.player_pool = self.player_pool.drop(
+            player)
+
+        # Start clock
+        self.clock = widgets.FloatProgress(value=0.0, min=0.0, max=1.0)
+
+        def work(progress):
+            for i in range(100):
+                time.sleep(self.clock_num_sec / 100)
+                progress.value = float(i + 1) / 100
+
+        thread = ReusableThread(target=work, args=(self.clock,))
+        display(data=self.clock)
+        thread.start()
+
+        while True:
+            bid = input('Enter bid and owner index (seperated by a space): ')
+            the_pick['Salary'], the_pick['Owner'] = bid.split(' ')
+            if thread.is_alive():
+                thread.restart()
+            else:
+                break
+        return the_pick
+
     def _one_pick_salary_cap(self, owner):
         # Notify owner they are up
         print("\n\n{}, you're up to nominate!".format(bold(owner)))
@@ -335,7 +427,7 @@ class Draft:
                 all_indv_draft_histories = pd.concat(
                     self.draft_history_indv.values(),
                     keys=self.draft_history_indv.keys())
-                display(all_indv_draft_histories)
+                display(data=all_indv_draft_histories)
             elif option == '2':
                 all_depth_charts = pd.concat(
                     self.depth_charts, axis=1).replace(np.nan, '', regex=True)
@@ -350,7 +442,7 @@ class Draft:
             elif option == '5':
                 display(self.draft_history.sort_values('Pick Overall'))
             elif option == '6':
-                check = input('Enter the player you would like to check the '
+                check = input('\nEnter the player you would like to check the '
                               'salary of: ')
                 if check in self.player_pool.index:
                     display(self.player_pool.loc[check])
@@ -362,9 +454,7 @@ class Draft:
                     if option == '9':
                         player = self.player_pool.head(1).index[0]
                     if player in self.player_pool.index.tolist():
-                        the_pick = self.player_pool.loc[player]
-                        self.player_pool = self.player_pool.drop(
-                            player)
+                        the_pick = self._bidding(player)
                         break
                     player = input('\nThat player is not in the player pool. '
                                    'Please re-enter the player, making sure '
