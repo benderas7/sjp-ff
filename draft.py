@@ -70,7 +70,7 @@ class ReusableThread(Thread):
             # notify about the run's end
             self._oneRunFinished.set()
 
-    def join(self):
+    def join(self, timeout=None):
         """ This join will only wait for one single run (target functioncall)
         to be finished"""
         self._oneRunFinished.wait()
@@ -147,19 +147,14 @@ class Draft:
                 self.draft_order = pickle.load(f)
         else:
             self.draft_order = None
-        if self.format == 'Snake':
-            column_names = ['Round', 'Player', 'Position', 'Bye',
-                            'ESPN Projection', 'Owner']
-        else:
-            column_names = ['Salary', 'Player', 'Position', 'Bye',
-                            'ESPN Projection', 'Owner']
-        self.draft_history = pd.DataFrame(index=[], columns=column_names)
+        self.draft_history = pd.DataFrame(
+            index=[], columns=self.player_pool.columns)
         self.draft_history.index.name = 'Pick Overall'
         self.draft_history_indv = {}
         self.depth_charts = {}
         for owner in self.owners:
             self.draft_history_indv[owner] = pd.DataFrame(
-                index=[], columns=column_names[:-1])
+                index=[], columns=self.player_pool.columns)
             self.draft_history_indv[owner].index.name = 'Pick Overall'
             self.depth_charts[owner] = pd.read_excel(
                 'depth_chart_blank.xlsx', index_col=[0])
@@ -255,20 +250,18 @@ class Draft:
                 return spot
         return spot[:-1] + str(int(spot[-1]) + 1)
 
-    def _update_data_structs(self, player, the_pick, owner):
+    def _update_data_structs(self, the_pick):
         # Update depth chart / draft histories
-        self.draft_history.loc[self.pick] = [
-            str(self.round_num), player, the_pick['Position'], the_pick[
-                'Bye'], the_pick['ESPN Projection'], owner]
-        self.draft_history_indv[owner].loc[self.pick] = [
-            str(self.round_num), player, the_pick['Position'], the_pick[
-                'Bye'], the_pick['ESPN Projection']]
+        print(the_pick)
+        self.draft_history.loc[self.pick] = the_pick
+        self.draft_history_indv[the_pick['Owner']].loc[
+            self.pick] = the_pick.drop('Owner')
         index = self._fill_depth_chart(
-            owner, the_pick['Position'], self.depth_charts)
-        self.depth_charts[owner].loc[index] = [
-            player, the_pick['Bye'], the_pick['ESPN Projection']]
-        self.depth_charts[owner] = self.depth_charts[
-            owner].astype({'Bye': pd.Int64Dtype()})
+            the_pick['Owner'], the_pick['Position'], self.depth_charts)
+        self.depth_charts[the_pick['Owner']].loc[index] = the_pick.drop(
+            ['Owner', 'Position'])
+        self.depth_charts[the_pick['Owner']] = self.depth_charts[
+            the_pick['Owner']].astype({'Bye': pd.Int64Dtype()})
 
         # Sort draft histories
         self.draft_history = self.draft_history.sort_values(
@@ -310,6 +303,8 @@ class Draft:
                 round_num = keeper_dct['round']
 
                 the_pick = self.player_pool.loc[player]
+                the_pick['Player'] = player
+                the_pick['Owner'] = owner
 
                 if round_num % 2:
                     spot_in_rd = self.draft_order.index(owner)
@@ -322,7 +317,7 @@ class Draft:
                 self.player_pool = self.player_pool.drop(player)
 
                 # Put keeper in draft histories and depth charts
-                self._update_data_structs(player, the_pick, owner)
+                self._update_data_structs(the_pick)
                 self._save_data()
 
     def pre_draft(self):
@@ -390,11 +385,16 @@ class Draft:
                 self._save_data()
                 return
 
-    def _bidding(self, player):
+    def _bidding(self, player, owner):
         # Remove player from player pool
         the_pick = self.player_pool.loc[player]
+        the_pick['Player'] = the_pick.index
         self.player_pool = self.player_pool.drop(
             player)
+
+        # Get starting bid
+        the_pick['Salary'] = input(
+            '{}, what would you like the starting bid to be? '.format(owner))
 
         # Start clock
         self.clock = widgets.FloatProgress(value=0.0, min=0.0, max=1.0)
@@ -410,11 +410,10 @@ class Draft:
 
         while True:
             bid = input('Enter bid and owner index (seperated by a space): ')
-            the_pick['Salary'], the_pick['Owner'] = bid.split(' ')
-            if thread.is_alive():
-                thread.restart()
-            else:
+            if bid == '0':
                 break
+            the_pick['Salary'], the_pick['Owner'] = bid.split(' ')
+            thread.restart()
         return the_pick
 
     def _one_pick_salary_cap(self, owner):
@@ -454,7 +453,7 @@ class Draft:
                     if option == '9':
                         player = self.player_pool.head(1).index[0]
                     if player in self.player_pool.index.tolist():
-                        the_pick = self._bidding(player)
+                        the_pick = self._bidding(player, owner)
                         break
                     player = input('\nThat player is not in the player pool. '
                                    'Please re-enter the player, making sure '
@@ -465,7 +464,7 @@ class Draft:
                     bold(owner), bold(player), bold(ordinal(self.pick))))
 
                 # Put player in draft histories and depth charts
-                self._update_data_structs(player, the_pick, owner)
+                self._update_data_structs(the_pick)
                 self._save_data()
                 return
 
